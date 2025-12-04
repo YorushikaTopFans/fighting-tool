@@ -1,0 +1,887 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>翻译游戏 — 随机抽句工具</title>
+  <!-- 浅色风格 -->
+  <style>
+    :root {
+      --bg: #f3f6fb;
+      /* 整体浅灰蓝背景 */
+      --card: #ffffff;
+      /* 卡片白底 */
+      --accent: #3b82f6;
+      /* 柔和蓝色点缀 */
+      --muted: #6b7280;
+      /* 灰色文字 */
+      --border: rgba(0, 0, 0, 0.08);
+    }
+
+    html,
+    body {
+      height: 100%;
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto;
+      background: var(--bg);
+      color: #1f2937;
+    }
+
+    .container {
+      max-width: 980px;
+      margin: 28px auto;
+      padding: 20px;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 20px;
+    }
+
+    p.lead {
+      margin: 6px 0 18px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    select,
+    input[type=number] {
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: #f9fafb;
+      color: #1f2937;
+    }
+
+    button {
+      padding: 9px 12px;
+      border-radius: 10px;
+      border: 0;
+      background: linear-gradient(90deg, var(--accent), #60a5fa);
+      color: white;
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    button.secondary {
+      background: #ffffff;
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .card {
+      background: var(--card);
+      padding: 14px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.04);
+    }
+
+    .zh {
+      font-size: 16px;
+      margin-bottom: 10px;
+      color: #1e293b;
+    }
+
+    .en {
+      font-size: 14px;
+      color: var(--muted);
+      display: none;
+    }
+
+    .meta {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .small {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    footer {
+      margin-top: 18px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .top-row {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+
+    @media (max-width:640px) {
+      .controls {
+        flex-direction: column;
+      }
+
+      header {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+    }
+  </style>
+
+</head>
+
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <h1>翻译游戏 — 随机抽句工具</h1>
+        <p class="lead">在浏览器中随机抽取中文句子，挑战翻译并当场说出来。支持按难度过滤、显示答案、导出题库。</p>
+      </div>
+    </header>
+
+    <div class="controls">
+      <div class="top-row">
+        <label for="difficulty" class="small" style="margin-right:8px">难度：</label>
+        <select id="difficulty">
+          <option value="All">All（全部）</option>
+          <option value="Easy">Easy</option>
+          <option value="Medium">Medium</option>
+        </select>
+      </div>
+
+      <div>
+        <label for="count" class="small" style="margin-right:8px">抽取数量：</label>
+        <input id="count" type="number" min="1" max="20" value="1" style="width:72px" />
+      </div>
+
+      <div style="display:flex;gap:8px;align-items:center">
+        <button id="pickBtn">随机抽取</button>
+        <button id="revealBtn" class="secondary">显示/隐藏 答案</button>
+        <button id="shuffleBtn" class="secondary">重新洗牌</button>
+      </div>
+
+      <div style="margin-left:auto;display:flex;gap:8px">
+        <button id="copyBtn" class="secondary">复制题目</button>
+        <button id="downloadBtn" class="secondary">导出 CSV</button>
+      </div>
+    </div>
+
+    <div id="cards" class="cards" aria-live="polite"></div>
+
+    <footer>
+      小技巧：把中文读给队友听，让他们翻译成英文；或者由你先翻译，再由别人复述并纠正。祝游戏愉快！
+    </footer>
+  </div>
+
+  <script>
+    // 题库：中文、英文、难度
+    const pool = [
+      // 生活类 Easy
+      { zh: "我喜欢喝咖啡。", en: "I like to drink coffee.", level: "Easy" },
+      { zh: "今天天气很好。", en: "The weather is good today.", level: "Easy" },
+      { zh: "我在等公交车。", en: "I am waiting for the bus.", level: "Easy" },
+      { zh: "我想吃披萨。", en: "I want to eat pizza.", level: "Easy" },
+      { zh: "我早上七点起床。", en: "I get up at seven in the morning.", level: "Easy" },
+      { zh: "我昨晚睡得很好。", en: "I slept well last night.", level: "Easy" },
+      { zh: "我在看一个电影。", en: "I am watching a movie.", level: "Easy" },
+      { zh: "我明天要去超市。", en: "I am going to the supermarket tomorrow.", level: "Easy" },
+      { zh: "我需要一点帮助。", en: "I need some help.", level: "Easy" },
+      { zh: "我在家工作。", en: "I work from home.", level: "Easy" },
+      { zh: "我喜欢听音乐。", en: "I like to listen to music.", level: "Easy" },
+      { zh: "我今天忘记吃早餐了。", en: "I forgot to eat breakfast today.", level: "Easy" },
+      { zh: "我周末想休息一下。", en: "I want to rest this weekend.", level: "Easy" },
+      { zh: "我正在做晚饭。", en: "I am cooking dinner.", level: "Easy" },
+      { zh: "我想喝一杯茶。", en: "I want to drink a cup of tea.", level: "Easy" },
+      { zh: "我现在在超市。", en: "I am at the supermarket right now.", level: "Easy" },
+      { zh: "我准备去散步。", en: "I am going for a walk.", level: "Easy" },
+      { zh: "我喜欢吃水果。", en: "I like to eat fruit.", level: "Easy" },
+      { zh: "我在看一本书。", en: "I am reading a book.", level: "Easy" },
+      { zh: "我需要买一点日用品。", en: "I need to buy some daily supplies.", level: "Easy" },
+      { zh: "我今天感觉很好。", en: "I feel good today.", level: "Easy" },
+      { zh: "我现在在做午饭。", en: "I am making lunch now.", level: "Easy" },
+      { zh: "我打算早点休息。", en: "I plan to rest early.", level: "Easy" },
+      { zh: "我现在在喝咖啡。", en: "I am drinking coffee right now.", level: "Easy" },
+      { zh: "我在等朋友一起吃饭。", en: "I am waiting for a friend to have a meal together.", level: "Easy" },
+      { zh: "我今天有点想睡觉。", en: "I feel a little sleepy today.", level: "Easy" },
+      { zh: "我正在打扫房间。", en: "I am cleaning my room.", level: "Easy" },
+      { zh: "我需要出去买点东西。", en: "I need to go out to buy something.", level: "Easy" },
+      { zh: "我今晚想看一部电影。", en: "I want to watch a movie tonight.", level: "Easy" },
+      { zh: "我在等快递。", en: "I am waiting for a delivery.", level: "Easy" },
+      { zh: "我准备做一点运动。", en: "I am about to do some exercise.", level: "Easy" },
+      { zh: "我需要整理一下我的东西。", en: "I need to organize my things.", level: "Easy" },
+      { zh: "我今天没有特别的计划。", en: "I don't have any special plans today.", level: "Easy" },
+      { zh: "我在看天气预报。", en: "I am checking the weather forecast.", level: "Easy" },
+      { zh: "我想尝试一家新的餐厅。", en: "I want to try a new restaurant.", level: "Easy" },
+      { zh: "我正在和家人聊天。", en: "I am chatting with my family.", level: "Easy" },
+      { zh: "我今天心情很好。", en: "I am in a good mood today.", level: "Easy" },
+
+      // 生活类 Medium
+      { zh: "我今天有点累，因为昨晚睡得很晚。", en: "I am a little tired today because I went to bed late last night.", level: "Medium" },
+      { zh: "如果有时间，我想去逛街。", en: "If I have time, I want to go shopping.", level: "Medium" },
+      { zh: "你能再说一遍吗？我没听清楚。", en: "Could you say that again? I didn’t hear clearly.", level: "Medium" },
+      { zh: "我正在尝试学习更多的英语。", en: "I am trying to learn more English.", level: "Medium" },
+      { zh: "我不太确定该怎么做。", en: "I’m not sure what to do.", level: "Medium" },
+      { zh: "这个周末我可能会去看朋友。", en: "I may visit my friend this weekend.", level: "Medium" },
+      { zh: "我昨天在公司待了一整天。", en: "I stayed at the office all day yesterday.", level: "Medium" },
+      { zh: "我正在等一个重要的电话。", en: "I am waiting for an important phone call.", level: "Medium" },
+      { zh: "我晚点再回复你。", en: "I will reply to you later.", level: "Medium" },
+      { zh: "如果你有时间的话，我们可以一起吃个晚饭。", en: "If you have time, we can have dinner together.", level: "Medium" },
+      { zh: "我最近开始学习做饭，虽然还不太熟练。", en: "I recently started learning how to cook, although I'm not very good at it yet.", level: "Medium" },
+      { zh: "你能告诉我最近发生了什么吗？我不是很清楚情况。", en: "Can you tell me what happened recently? I'm not very clear about the situation.", level: "Medium" },
+      { zh: "我觉得这几天天气变化太快了，很容易感冒。", en: "I think the weather has been changing too fast lately, and it's easy to catch a cold.", level: "Medium" },
+      { zh: "你周末有什么计划吗？我在考虑出去走走。", en: "Do you have any plans for the weekend? I'm thinking about going out for a walk.", level: "Medium" },
+      { zh: "很抱歉我回复得有点晚，我刚刚在处理一些事情。", en: "Sorry for the late reply. I was dealing with something just now.", level: "Medium" },
+      { zh: "我最近睡眠不太好，所以白天有点累。", en: "I haven't been sleeping well lately, so I feel a bit tired during the day.", level: "Medium" },
+      { zh: "我喜欢在空闲的时候看书或者听音乐放松一下。", en: "I like to read books or listen to music to relax in my free time.", level: "Medium" },
+      { zh: "如果你愿意的话，我们可以一起练习英语口语。", en: "If you want, we can practice English speaking together.", level: "Medium" },
+      { zh: "今天早上太匆忙了，我连早餐都没来得及吃。", en: "This morning was too rushed, and I didn’t even have time for breakfast.", level: "Medium" },
+      { zh: "我觉得这家餐厅的环境很好，但是菜有点贵。", en: "I think the environment of this restaurant is great, but the food is a bit expensive.", level: "Medium" },
+      { zh: "你可以把你的想法再说得详细一点吗？", en: "Could you explain your idea in more detail?", level: "Medium" },
+      { zh: "我打算利用假期去旅行，顺便放松一下心情。", en: "I'm planning to travel during the holiday to relax a bit.", level: "Medium" },
+      { zh: "你今天看起来有点累，是不是工作太多了？", en: "You look a bit tired today. Do you have too much work?", level: "Medium" },
+      { zh: "如果你需要我的帮助，随时告诉我，我很乐意协助。", en: "If you need my help, feel free to tell me. I'm happy to assist.", level: "Medium" },
+
+
+      // 开发类 Easy
+      { zh: "我今天有很多会议。", en: "I have many meetings today.", level: "Easy" },
+      { zh: "这个功能还需要测试。", en: "This feature still needs testing.", level: "Easy" },
+      { zh: "我们需要再讨论一下这个需求。", en: "We need to discuss this requirement again.", level: "Easy" },
+      { zh: "我遇到一个 bug。", en: "I found a bug.", level: "Easy" },
+      { zh: "这个接口返回的数据不对。", en: "The API returned the wrong data.", level: "Easy" },
+      { zh: "我正在修复一个问题。", en: "I am fixing an issue.", level: "Easy" },
+      { zh: "我们今天要发布新版本。", en: "We will release a new version today.", level: "Easy" },
+      { zh: "代码已经提交到仓库了。", en: "The code has been pushed to the repository.", level: "Easy" },
+      { zh: "我需要你 review 一下我的代码。", en: "I need you to review my code.", level: "Easy" },
+      { zh: "我们可能需要改一下设计。", en: "We may need to change the design.", level: "Easy" },
+      { zh: "这个页面加载太慢了。", en: "This page loads too slowly.", level: "Easy" },
+      { zh: "我在等待后端的数据。", en: "I am waiting for the backend data.", level: "Easy" },
+      { zh: "这个需求的优先级很高。", en: "The priority of this requirement is high.", level: "Easy" },
+      { zh: "产品文档还没写完。", en: "The product document is not finished yet.", level: "Easy" },
+      { zh: "我们开个短会讨论一下。", en: "Let's have a short meeting to discuss.", level: "Easy" },
+      { zh: "我正在修一个小问题。", en: "I am fixing a small issue.", level: "Easy" },
+      { zh: "这个接口已经可以用了。", en: "This API is ready to use.", level: "Easy" },
+      { zh: "我正在等后端的数据。", en: "I am waiting for the backend data.", level: "Easy" },
+      { zh: "我刚刚提交了代码。", en: "I just submitted the code.", level: "Easy" },
+      { zh: "我需要重新跑一下项目。", en: "I need to run the project again.", level: "Easy" },
+      { zh: "这个功能已经测试过了。", en: "This feature has been tested.", level: "Easy" },
+      { zh: "我今天主要做前端页面。", en: "I am mainly working on the frontend page today.", level: "Easy" },
+      { zh: "你可以帮我看一下这个报错吗？", en: "Can you help me check this error?", level: "Easy" },
+      { zh: "我正在尝试重现这个 bug。", en: "I am trying to reproduce this bug.", level: "Easy" },
+      { zh: "我需要更新一下依赖。", en: "I need to update the dependencies.", level: "Easy" },
+      { zh: "我正在阅读这段代码。", en: "I am reading this piece of code.", level: "Easy" },
+      { zh: "这个任务很简单，我可以处理。", en: "This task is simple, I can handle it.", level: "Easy" },
+      { zh: "我今天在做代码优化。", en: "I am doing some code optimization today.", level: "Easy" },
+      { zh: "我忘记 push 代码了。", en: "I forgot to push the code.", level: "Easy" },
+      { zh: "我正在开一个本地服务器。", en: "I am running a local server.", level: "Easy" },
+      { zh: "我正在检查代码格式。", en: "I am checking the code format.", level: "Easy" },
+      { zh: "我在等你的代码提交。", en: "I am waiting for your code commit.", level: "Easy" },
+      { zh: "这个页面还没有写完。", en: "This page is not finished yet.", level: "Easy" },
+      { zh: "我需要拉取最新代码。", en: "I need to pull the latest code.", level: "Easy" },
+      { zh: "这个功能我可以今天完成。", en: "I can finish this feature today.", level: "Easy" },
+      { zh: "我正在本地测试这个接口。", en: "I am testing this API locally.", level: "Easy" },
+      { zh: "我已经更新了配置文件。", en: "I have updated the config file.", level: "Easy" },
+      { zh: "我重启了服务器。", en: "I restarted the server.", level: "Easy" },
+      { zh: "我正在看接口文档。", en: "I am reading the API documentation.", level: "Easy" },
+      { zh: "这个 bug 已经修掉了。", en: "This bug has been fixed.", level: "Easy" },
+      { zh: "我正在查看这个接口的返回数据。", en: "I am checking the response data of this API.", level: "Easy" },
+      { zh: "我需要在本地跑一下这个项目。", en: "I need to run this project locally.", level: "Easy" },
+      { zh: "我已经更新了前端页面。", en: "I have updated the frontend page.", level: "Easy" },
+      { zh: "我在试着找到这个问题的原因。", en: "I am trying to find the cause of this issue.", level: "Easy" },
+      { zh: "我正在写一个新的组件。", en: "I am writing a new component.", level: "Easy" },
+      { zh: "这个任务我已经开始做了。", en: "I have already started this task.", level: "Easy" },
+      { zh: "我需要你给我一下数据库连接信息。", en: "I need you to give me the database connection information.", level: "Easy" },
+      { zh: "我再检查一下代码逻辑。", en: "I will check the code logic again.", level: "Easy" },
+      { zh: "我正在跑单元测试。", en: "I am running the unit tests.", level: "Easy" },
+      { zh: "我准备提交一个新的分支。", en: "I am going to submit a new branch.", level: "Easy" },
+
+      // 开发类 Medium
+      { zh: "这个功能比我们预期的复杂，需要更多时间。", en: "This feature is more complicated than we expected and needs more time.", level: "Medium" },
+      { zh: "我们可能需要和前端再确认一下接口格式。", en: "We may need to confirm the API format with the frontend again.", level: "Medium" },
+      { zh: "如果后端今天完成，我明天就可以开始开发。", en: "If the backend finishes today, I can start development tomorrow.", level: "Medium" },
+      { zh: "这个需求目前还没有明确的细节。", en: "This requirement does not have clear details yet.", level: "Medium" },
+      { zh: "我发现这个 bug 很难复现。", en: "I found that this bug is hard to reproduce.", level: "Medium" },
+      { zh: "这个版本上线之后，我们需要观察数据。", en: "After this version goes online, we need to monitor the data.", level: "Medium" },
+      { zh: "我已经把问题记录在 Jira 里了。", en: "I have recorded the issue in Jira.", level: "Medium" },
+      { zh: "你能告诉我这个设计背后的原因吗？", en: "Can you tell me the reason behind this design?", level: "Medium" },
+      { zh: "我觉得我们需要一个更清晰的流程。", en: "I think we need a clearer process.", level: "Medium" },
+      { zh: "我会在今天下午之前给你最新的进度。", en: "I will give you the latest progress before this afternoon.", level: "Medium" },
+
+
+      // 面试类 Easy
+      { zh: "我有三年的开发经验。", en: "I have three years of development experience.", level: "Easy" },
+      { zh: "我主要使用 Java 进行开发。", en: "I mainly use Java for development.", level: "Easy" },
+      { zh: "我熟悉前后端分离的项目结构。", en: "I am familiar with frontend-backend separated project structures.", level: "Easy" },
+      { zh: "我平常会使用 Git 做版本管理。", en: "I use Git for version control.", level: "Easy" },
+      { zh: "我喜欢写干净易读的代码。", en: "I like writing clean and readable code.", level: "Easy" },
+      { zh: "我熟悉基本的数据结构。", en: "I am familiar with basic data structures.", level: "Easy" },
+      { zh: "我了解 RESTful API 的设计。", en: "I understand RESTful API design.", level: "Easy" },
+      { zh: "我习惯先阅读需求文档再开始开发。", en: "I usually read the requirement document before starting development.", level: "Easy" },
+      { zh: "我会写简单的单元测试。", en: "I can write simple unit tests.", level: "Easy" },
+      { zh: "我喜欢学习新的技术。", en: "I enjoy learning new technologies.", level: "Easy" },
+      { zh: "我能独立完成任务。", en: "I can complete tasks independently.", level: "Easy" },
+      { zh: "我也喜欢和团队合作。", en: "I also enjoy working with a team.", level: "Easy" },
+      { zh: "我能够按时完成工作。", en: "I can deliver work on time.", level: "Easy" },
+      { zh: "我习惯使用代码审查来提高质量。", en: "I use code reviews to improve quality.", level: "Easy" },
+      { zh: "我已经参与过多个实际项目。", en: "I have participated in several real projects.", level: "Easy" },
+
+      // 一般现在时 Easy
+      { zh: "我每天喝咖啡。", en: "I drink coffee every day.", level: "Easy" },
+      { zh: "他喜欢听音乐。", en: "He likes to listen to music.", level: "Easy" },
+      { zh: "我们住在同一个城市。", en: "We live in the same city.", level: "Easy" },
+      { zh: "她周末工作。", en: "She works on weekends.", level: "Easy" },
+      { zh: "他们每晚看电视。", en: "They watch TV every night.", level: "Easy" },
+      { zh: "太阳从东边升起。", en: "The sun rises in the east.", level: "Easy" },
+      { zh: "他每天读书。", en: "He reads books every day.", level: "Easy" },
+      { zh: "我们经常去公园。", en: "We often go to the park.", level: "Easy" },
+      { zh: "她弹钢琴很好。", en: "She plays the piano well.", level: "Easy" },
+
+      // 一般进行时 Easy
+      { zh: "我正在吃午饭。", en: "I am eating lunch.", level: "Easy" },
+      { zh: "她正在看书。", en: "She is reading a book.", level: "Easy" },
+      { zh: "我们正在学习英语。", en: "We are studying English.", level: "Easy" },
+      { zh: "他正在做饭。", en: "He is cooking.", level: "Easy" },
+      { zh: "他们正在开会。", en: "They are having a meeting.", level: "Easy" },
+      { zh: "外面正在下雨。", en: "It is raining outside.", level: "Easy" },
+      { zh: "我正在听音乐。", en: "I am listening to music.", level: "Easy" },
+      { zh: "老师正在讲话。", en: "The teacher is talking.", level: "Easy" },
+      { zh: "我们正在等公交。", en: "We are waiting for the bus.", level: "Easy" },
+      { zh: "她正在打电话。", en: "She is making a phone call.", level: "Easy" },
+
+      // 一般过去时 Easy
+      { zh: "我昨天去了超市。", en: "I went to the supermarket yesterday.", level: "Easy" },
+      { zh: "他昨晚看了电影。", en: "He watched a movie last night.", level: "Easy" },
+      { zh: "我们上周见过他。", en: "We saw him last week.", level: "Easy" },
+      { zh: "她上个月开始了新工作。", en: "She started a new job last month.", level: "Easy" },
+      { zh: "他们两天前回家了。", en: "They went home two days ago.", level: "Easy" },
+      { zh: "我刚才喝了茶。", en: "I drank tea just now.", level: "Easy" },
+      { zh: "他昨天很忙。", en: "He was busy yesterday.", level: "Easy" },
+      { zh: "我们昨晚吃了面条。", en: "We ate noodles last night.", level: "Easy" },
+      { zh: "她早上起得很早。", en: "She got up early this morning.", level: "Easy" },
+      { zh: "我上周买了一本书。", en: "I bought a book last week.", level: "Easy" },
+
+      // 一般将来时 Easy
+      { zh: "我明天会去上班。", en: "I will go to work tomorrow.", level: "Easy" },
+      { zh: "他今晚会做晚饭。", en: "He will cook dinner tonight.", level: "Easy" },
+      { zh: "我们周末会见面。", en: "We will meet this weekend.", level: "Easy" },
+      { zh: "她会去旅游。", en: "She is going to travel.", level: "Easy" },
+      { zh: "他们打算买一辆车。", en: "They are going to buy a car.", level: "Easy" },
+      { zh: "我会学习英语。", en: "I will study English.", level: "Easy" },
+      { zh: "明天会下雨。", en: "It will rain tomorrow.", level: "Easy" },
+      { zh: "我们要开一个新会议。", en: "We are going to have a new meeting.", level: "Easy" },
+      { zh: "他会回电话给你。", en: "He will call you back.", level: "Easy" },
+      { zh: "我打算早点睡。", en: "I am going to sleep early.", level: "Easy" },
+
+      // 过去进行时 Easy
+      { zh: "我昨天晚上正在看电视。", en: "I was watching TV last night.", level: "Easy" },
+      { zh: "她当时正在做晚饭。", en: "She was cooking dinner at that time.", level: "Easy" },
+      { zh: "他们昨天正在踢足球。", en: "They were playing soccer yesterday.", level: "Easy" },
+      { zh: "我们正在等公交车。", en: "We were waiting for the bus.", level: "Easy" },
+      { zh: "他那时正在读一本书。", en: "He was reading a book then.", level: "Easy" },
+      { zh: "我刚才正在洗澡。", en: "I was taking a shower just now.", level: "Easy" },
+      { zh: "她那时正在打电话。", en: "She was talking on the phone.", level: "Easy" },
+      { zh: "孩子们下午正在睡觉。", en: "The kids were sleeping in the afternoon.", level: "Easy" },
+      { zh: "我到家时，他正在做作业。", en: "He was doing his homework when I got home.", level: "Easy" },
+      { zh: "我们正在吃午饭。", en: "We were eating lunch.", level: "Easy" },
+
+      // 现在完成时 Easy
+      { zh: "我已经吃过早餐了。", en: "I have eaten breakfast.", level: "Easy" },
+      { zh: "他已经完成作业了。", en: "He has finished his homework.", level: "Easy" },
+      { zh: "我们已经认识很多年了。", en: "We have known each other for many years.", level: "Easy" },
+      { zh: "她已经去了日本。", en: "She has gone to Japan.", level: "Easy" },
+      { zh: "他们已经开始工作了。", en: "They have started working.", level: "Easy" },
+      { zh: "我已经看过这部电影了。", en: "I have seen this movie.", level: "Easy" },
+      { zh: "他已经喝了三杯水。", en: "He has drunk three glasses of water.", level: "Easy" },
+      { zh: "我们已经等了十分钟。", en: "We have waited for ten minutes.", level: "Easy" },
+      { zh: "她已经学英语两年了。", en: "She has studied English for two years.", level: "Easy" },
+      { zh: "他们已经搬进新家了。", en: "They have moved into their new home.", level: "Easy" },
+
+      // 陈述句
+      { zh: "我今天很忙。", en: "I am very busy today.", level: "Easy" },
+      { zh: "外面有点冷。", en: "It's a bit cold outside.", level: "Easy" },
+      { zh: "这咖啡很好喝。", en: "This coffee tastes good.", level: "Easy" },
+      { zh: "我已经吃过了。", en: "I already ate.", level: "Easy" },
+      { zh: "我正在回家。", en: "I am on my way home.", level: "Easy" },
+      { zh: "我晚上要加班。", en: "I need to work overtime tonight.", level: "Easy" },
+      { zh: "我喜欢这部电影。", en: "I like this movie.", level: "Easy" },
+      { zh: "我手机没电了。", en: "My phone is out of battery.", level: "Easy" },
+      { zh: "我在超市。", en: "I am at the supermarket.", level: "Easy" },
+      { zh: "我明天休息。", en: "I have a day off tomorrow.", level: "Easy" },
+      { zh: "这件衣服很便宜。", en: "This shirt is very cheap.", level: "Easy" },
+      { zh: "我已经准备好了。", en: "I am ready.", level: "Easy" },
+      { zh: "我喜欢安静的地方。", en: "I like quiet places.", level: "Easy" },
+      { zh: "我住得很近。", en: "I live nearby.", level: "Easy" },
+      { zh: "我正在等你。", en: "I am waiting for you.", level: "Easy" },
+      { zh: "这真的很方便。", en: "This is really convenient.", level: "Easy" },
+      { zh: "我今天起得很早。", en: "I got up very early today.", level: "Easy" },
+      { zh: "我现在没事做。", en: "I have nothing to do right now.", level: "Easy" },
+      { zh: "天气很好。", en: "The weather is nice.", level: "Easy" },
+      { zh: "我喜欢这个颜色。", en: "I like this color.", level: "Easy" },
+
+      // 疑问句 Easy
+      { zh: "你今天好吗？", en: "How are you today?", level: "Easy" },
+      { zh: "你叫什么名字？", en: "What is your name?", level: "Easy" },
+      { zh: "你住在哪里？", en: "Where do you live?", level: "Easy" },
+      { zh: "你喜欢咖啡吗？", en: "Do you like coffee?", level: "Easy" },
+      { zh: "现在几点了？", en: "What time is it?", level: "Easy" },
+      { zh: "你会开车吗？", en: "Can you drive?", level: "Easy" },
+      { zh: "你昨天去了哪里？", en: "Where did you go yesterday?", level: "Easy" },
+      { zh: "你在做什么？", en: "What are you doing?", level: "Easy" },
+      { zh: "你为什么迟到？", en: "Why are you late?", level: "Easy" },
+      { zh: "这是你的手机吗？", en: "Is this your phone?", level: "Easy" },
+      { zh: "你想吃什么？", en: "What do you want to eat?", level: "Easy" },
+      { zh: "你会说英语吗？", en: "Can you speak English?", level: "Easy" },
+      { zh: "你明天有空吗？", en: "Are you free tomorrow?", level: "Easy" },
+      { zh: "你最喜欢哪部电影？", en: "What is your favorite movie?", level: "Easy" },
+      { zh: "他在哪里工作？", en: "Where does he work?", level: "Easy" },
+      { zh: "你吃过午饭了吗？", en: "Have you eaten lunch?", level: "Easy" },
+      { zh: "我们什么时候出发？", en: "When are we leaving?", level: "Easy" },
+      { zh: "天气怎么样？", en: "How is the weather?", level: "Easy" },
+      { zh: "你想一起去吗？", en: "Do you want to go with me?", level: "Easy" },
+      { zh: "你为什么笑？", en: "Why are you laughing?", level: "Easy" },
+
+      // 否定句 Easy
+      { zh: "我不想出去。", en: "I don't want to go out.", level: "Easy" },
+      { zh: "我今天不太舒服。", en: "I don't feel well today.", level: "Easy" },
+      { zh: "我不喜欢这个味道。", en: "I don't like this taste.", level: "Easy" },
+      { zh: "我不需要帮助。", en: "I don't need help.", level: "Easy" },
+      { zh: "我不明白你的意思。", en: "I don't understand what you mean.", level: "Easy" },
+      { zh: "我不想吃辣的。", en: "I don't want spicy food.", level: "Easy" },
+      { zh: "我不喝咖啡。", en: "I don't drink coffee.", level: "Easy" },
+      { zh: "我不赶时间。", en: "I am not in a hurry.", level: "Easy" },
+      { zh: "我不住在这里。", en: "I don't live here.", level: "Easy" },
+      { zh: "我没有空。", en: "I don't have time.", level: "Easy" },
+      { zh: "我不喜欢下雨天。", en: "I don't like rainy days.", level: "Easy" },
+      { zh: "我不在意这些。", en: "I don't care about that.", level: "Easy" },
+      { zh: "我不想谈这个。", en: "I don't want to talk about this.", level: "Easy" },
+      { zh: "这不是我的东西。", en: "This is not mine.", level: "Easy" },
+      { zh: "我不想迟到。", en: "I don't want to be late.", level: "Easy" },
+      { zh: "我不觉得这很好。", en: "I don't think it's good.", level: "Easy" },
+      { zh: "我今天不做饭。", en: "I am not cooking today.", level: "Easy" },
+      { zh: "我不确定。", en: "I'm not sure.", level: "Easy" },
+      { zh: "我不需要这个。", en: "I don't need this.", level: "Easy" },
+      { zh: "我不记得了。", en: "I don't remember.", level: "Easy" },
+
+      // 祈使句 Easy
+      { zh: "请坐。", en: "Please sit down.", level: "Easy" },
+      { zh: "请等一下。", en: "Please wait a moment.", level: "Easy" },
+      { zh: "开门。", en: "Open the door.", level: "Easy" },
+      { zh: "关灯。", en: "Turn off the light.", level: "Easy" },
+      { zh: "请慢一点。", en: "Please slow down.", level: "Easy" },
+      { zh: "请说大声一点。", en: "Please speak louder.", level: "Easy" },
+      { zh: "把窗户打开。", en: "Open the window.", level: "Easy" },
+      { zh: "请安静。", en: "Please be quiet.", level: "Easy" },
+      { zh: "给我看看。", en: "Show me.", level: "Easy" },
+      { zh: "别担心。", en: "Don't worry.", level: "Easy" },
+      { zh: "记得带伞。", en: "Remember to bring an umbrella.", level: "Easy" },
+      { zh: "请发给我。", en: "Please send it to me.", level: "Easy" },
+      { zh: "帮我一下。", en: "Help me a little.", level: "Easy" },
+      { zh: "快点。", en: "Hurry up.", level: "Easy" },
+      { zh: "请试一下。", en: "Please try it.", level: "Easy" },
+      { zh: "关上门。", en: "Close the door.", level: "Easy" },
+      { zh: "请坐好。", en: "Please sit properly.", level: "Easy" },
+      { zh: "请通知我。", en: "Please let me know.", level: "Easy" },
+      { zh: "别忘了。", en: "Don't forget.", level: "Easy" },
+      { zh: "小心点。", en: "Be careful.", level: "Easy" },
+
+      // 从句
+      { zh: "我觉得你说得对，因为你的理由很清楚。", en: "I think you are right because your reason is clear.", level: "Easy" },
+      { zh: "如果你有时间，我们可以一起吃饭。", en: "If you have time, we can eat together.", level: "Easy" },
+      { zh: "我知道你很忙，所以我没有打扰你。", en: "I know you are busy, so I didn't bother you.", level: "Easy" },
+      { zh: "等我到了，我会给你发消息。", en: "When I arrive, I will message you.", level: "Easy" },
+      { zh: "虽然下雨了，我还是想出去走走。", en: "Although it is raining, I still want to go out.", level: "Easy" },
+      { zh: "如果你喜欢，我们可以再多看看。", en: "If you like it, we can look more.", level: "Easy" },
+      { zh: "我记得你说过你不吃辣。", en: "I remember you said you don't eat spicy food.", level: "Easy" },
+      { zh: "我会等你，因为我不着急。", en: "I will wait for you because I am not in a hurry.", level: "Easy" },
+      { zh: "我不知道他什么时候回来。", en: "I don't know when he will come back.", level: "Easy" },
+      { zh: "如果天气好，我们就去公园。", en: "If the weather is good, we will go to the park.", level: "Easy" },
+      { zh: "我发现你今天看起来很开心。", en: "I noticed that you look happy today.", level: "Easy" },
+      { zh: "我希望你能理解我的想法。", en: "I hope you can understand my idea.", level: "Easy" },
+      { zh: "当你准备好了，我们就出发。", en: "When you are ready, we will leave.", level: "Easy" },
+      { zh: "我以为你已经吃过了。", en: "I thought you had already eaten.", level: "Easy" },
+      { zh: "如果你需要帮助，可以告诉我。", en: "If you need help, you can tell me.", level: "Easy" },
+      { zh: "我知道你为什么生气。", en: "I know why you are angry.", level: "Easy" },
+      { zh: "我不确定他是不是在家。", en: "I am not sure if he is at home.", level: "Easy" },
+      { zh: "虽然很晚了，我还是想继续看电影。", en: "Although it's late, I still want to watch the movie.", level: "Easy" },
+      { zh: "你可以来找我，如果你方便的话。", en: "You can come find me if it's convenient for you.", level: "Easy" },
+      { zh: "我会去你家，只要你告诉我地址。", en: "I will go to your place as long as you tell me the address.", level: "Easy" },
+      { zh: "我知道你说的那件事。", en: "I know the thing that you said.", level: "Easy" },
+      { zh: "我认识那个帮助你的人。", en: "I know the person who helped you.", level: "Easy" },
+      { zh: "这是我昨天买的那本书。", en: "This is the book that I bought yesterday.", level: "Easy" },
+      { zh: "这是我喜欢的那家餐厅。", en: "This is the restaurant that I like.", level: "Easy" },
+      { zh: "她是那个总是微笑的人。", en: "She is the one who always smiles.", level: "Easy" },
+      { zh: "我找到了你要的那份文件。", en: "I found the file that you wanted.", level: "Easy" },
+      { zh: "他是带我们参观的人。", en: "He is the person who showed us around.", level: "Easy" },
+      { zh: "这是我想给你的礼物。", en: "This is the gift that I want to give you.", level: "Easy" },
+      { zh: "我遇到一个会说中文的人。", en: "I met someone who can speak Chinese.", level: "Easy" },
+      { zh: "这是我昨天看的电影。", en: "This is the movie that I watched yesterday.", level: "Easy" },
+      { zh: "他是告诉我消息的人。", en: "He is the one who told me the news.", level: "Easy" },
+      { zh: "我喜欢能让我放松的音乐。", en: "I like music that helps me relax.", level: "Easy" },
+      { zh: "我找到一个能修电脑的人。", en: "I found someone who can fix computers.", level: "Easy" },
+      { zh: "这就是我说的那个地方。", en: "This is the place that I talked about.", level: "Easy" },
+      { zh: "他是总是帮我的人。", en: "He is the one who always helps me.", level: "Easy" },
+      { zh: "我买了你推荐的那件衣服。", en: "I bought the clothes that you recommended.", level: "Easy" },
+      { zh: "她认识一个住在附近的人。", en: "She knows someone who lives nearby.", level: "Easy" },
+      { zh: "这是我需要完成的任务。", en: "This is the task that I need to finish.", level: "Easy" },
+      { zh: "我很喜欢你做的那道菜。", en: "I like the dish that you made.", level: "Easy" },
+      { zh: "他是昨天来我们家的那个朋友。", en: "He is the friend who came to our home yesterday.", level: "Easy" },
+      { zh: "当我到家的时候，我会给你打电话。", en: "When I get home, I will call you.", level: "Easy" },
+      { zh: "在你吃饭之前，记得洗手。", en: "Before you eat, remember to wash your hands.", level: "Easy" },
+      { zh: "当电影开始的时候，灯会变暗。", en: "When the movie starts, the lights will go dark.", level: "Easy" },
+      { zh: "我会等你，直到你准备好。", en: "I will wait for you until you are ready.", level: "Easy" },
+      { zh: "当我起床的时候，天已经亮了。", en: "When I got up, it was already bright.", level: "Easy" },
+      { zh: "在我离开之前，我要去一趟商店。", en: "Before I leave, I need to go to the store.", level: "Easy" },
+      { zh: "当你看到他的时候，请告诉我。", en: "When you see him, please tell me.", level: "Easy" },
+      { zh: "当我在工作的时候，不要打扰我。", en: "When I am working, don't disturb me.", level: "Easy" },
+      { zh: "当我听音乐的时候，我会放松下来。", en: "When I listen to music, I relax.", level: "Easy" },
+      { zh: "在他回来之后，我们再开始吧。", en: "After he comes back, let's start.", level: "Easy" },
+      { zh: "当你完成的时候，发个消息给我。", en: "When you finish, send me a message.", level: "Easy" },
+      { zh: "当我洗澡的时候，手机在响。", en: "While I was taking a shower, my phone was ringing.", level: "Easy" },
+      { zh: "在你睡觉之前，记得关灯。", en: "Before you sleep, remember to turn off the light.", level: "Easy" },
+      { zh: "当我见到她的时候，我会问清楚。", en: "When I see her, I will ask clearly.", level: "Easy" },
+      { zh: "在我们开始之前，我想先说点事。", en: "Before we start, I want to say something.", level: "Easy" },
+      { zh: "当你回家的时候，小心一点。", en: "When you go home, be careful.", level: "Easy" },
+      { zh: "一到周末，我就想睡懒觉。", en: "When the weekend comes, I want to sleep in.", level: "Easy" },
+      { zh: "当我到办公室的时候，他已经不在了。", en: "When I arrived at the office, he was already gone.", level: "Easy" },
+      { zh: "在你出门之前，检查一下钥匙。", en: "Before you go out, check your keys.", level: "Easy" },
+      { zh: "一旦我收到消息，我会告诉你。", en: "As soon as I get the message, I will tell you.", level: "Easy" },
+      { zh: "如果你需要帮助，告诉我。", en: "If you need help, tell me.", level: "Easy" },
+      { zh: "如果下雨，我们就不出门了。", en: "If it rains, we won't go out.", level: "Easy" },
+      { zh: "如果你早点来，我们可以一起吃早餐。", en: "If you come early, we can have breakfast together.", level: "Easy" },
+      { zh: "如果你喜欢，我们可以再看一会儿。", en: "If you like, we can watch a bit more.", level: "Easy" },
+      { zh: "如果我有时间，我会去找你。", en: "If I have time, I will visit you.", level: "Easy" },
+      { zh: "只要你努力，你一定会成功。", en: "As long as you work hard, you will succeed.", level: "Easy" },
+      { zh: "如果你忘记带钥匙，就打给我。", en: "If you forget your key, call me.", level: "Easy" },
+      { zh: "如果我太累了，我就先休息一下。", en: "If I am too tired, I will take a rest first.", level: "Easy" },
+      { zh: "除非你告诉我，否则我不知道。", en: "Unless you tell me, I won't know.", level: "Easy" },
+      { zh: "如果你不喜欢，我们可以换一家。", en: "If you don't like it, we can change to another place.", level: "Easy" },
+      { zh: "如果你现在出发，会来得及。", en: "If you leave now, you will make it on time.", level: "Easy" },
+      { zh: "如果你生病了，就早点休息。", en: "If you are sick, rest early.", level: "Easy" },
+      { zh: "只要你在，我就很安心。", en: "As long as you are here, I feel safe.", level: "Easy" },
+      { zh: "如果你觉得冷，就穿外套。", en: "If you feel cold, wear a jacket.", level: "Easy" },
+      { zh: "如果他忙，我们就不要打扰他。", en: "If he is busy, let's not bother him.", level: "Easy" },
+      { zh: "如果明天有时间，我们一起去散步。", en: "If we have time tomorrow, let's take a walk.", level: "Easy" },
+      { zh: "如果你不知道怎么做，可以问我。", en: "If you don't know how to do it, you can ask me.", level: "Easy" },
+      { zh: "如果你喜欢这件衣服，就买下来。", en: "If you like this shirt, buy it.", level: "Easy" },
+      { zh: "除非下大雨，否则我会去。", en: "Unless it rains heavily, I will go.", level: "Easy" },
+      { zh: "只要你告诉我，我一定会帮你。", en: "As long as you tell me, I will help you.", level: "Easy" },
+
+      // 随机 Medium
+      { zh: "他每天早上都会去跑步。", en: "He goes for a run every morning.", level: "Medium" },
+      { zh: "她正在学习如何做饭。", en: "She is learning how to cook.", level: "Medium" },
+      { zh: "我们明天会去公园玩。", en: "We will go to the park tomorrow.", level: "Medium" },
+      { zh: "这本书比那本更有趣。", en: "This book is more interesting than that one.", level: "Medium" },
+      { zh: "他喜欢在周末和朋友一起看电影。", en: "He likes to watch movies with his friends on weekends.", level: "Medium" },
+      { zh: "请把窗户打开，让空气流通。", en: "Please open the window to let the air flow.", level: "Medium" },
+      { zh: "他们正在计划一个小型的旅行。", en: "They are planning a small trip.", level: "Medium" },
+      { zh: "我昨天见到了我的老朋友。", en: "I met my old friend yesterday.", level: "Medium" },
+      { zh: "她每天都会练习弹钢琴。", en: "She practices playing the piano every day.", level: "Medium" },
+      { zh: "这家咖啡店的咖啡很好喝。", en: "The coffee at this café tastes really good.", level: "Medium" },
+      { zh: "他想学习新的语言。", en: "He wants to learn a new language.", level: "Medium" },
+      { zh: "我们需要买一些水果和蔬菜。", en: "We need to buy some fruits and vegetables.", level: "Medium" },
+      { zh: "请帮我把这封信寄出去。", en: "Please help me send out this letter.", level: "Medium" },
+      { zh: "她每天早上都会喝一杯咖啡。", en: "She drinks a cup of coffee every morning.", level: "Medium" },
+      { zh: "我喜欢在周末读书。", en: "I like reading books on weekends.", level: "Medium" },
+      { zh: "他正在修理他的自行车。", en: "He is fixing his bicycle.", level: "Medium" },
+      { zh: "请把灯关掉，房间有点亮。", en: "Please turn off the light; the room is a bit bright.", level: "Medium" },
+      { zh: "我们今天晚上去看电影吧。", en: "Let's go watch a movie tonight.", level: "Medium" },
+      { zh: "她喜欢在公园散步。", en: "She likes taking a walk in the park.", level: "Medium" },
+      { zh: "他每天晚上都会看新闻。", en: "He watches the news every night.", level: "Medium" },
+      { zh: "我想买一双新鞋子。", en: "I want to buy a new pair of shoes.", level: "Medium" },
+      { zh: "她正在听音乐放松自己。", en: "She is listening to music to relax.", level: "Medium" },
+      { zh: "我们周末常常去郊游。", en: "We often go on trips on weekends.", level: "Medium" },
+      { zh: "请把书放回书架上。", en: "Please put the book back on the shelf.", level: "Medium" },
+      { zh: "他喜欢早上喝茶而不是咖啡。", en: "He likes to drink tea in the morning instead of coffee.", level: "Medium" },
+      { zh: "孩子们在操场上跑来跑去。", en: "The children are running around on the playground.", level: "Medium" },
+      { zh: "我每天骑自行车上班。", en: "I ride my bicycle to work every day.", level: "Medium" },
+      { zh: "她买了一些新衣服准备旅行。", en: "She bought some new clothes for her trip.", level: "Medium" },
+      { zh: "我喜欢在晚上散步。", en: "I like taking a walk at night.", level: "Medium" },
+      { zh: "请把手机静音，不要打扰别人。", en: "Please put your phone on silent and don't disturb others.", level: "Medium" },
+      { zh: "她正在学习新的舞蹈动作。", en: "She is learning new dance moves.", level: "Medium" },
+      { zh: "我们需要更多的时间完成作业。", en: "We need more time to finish our homework.", level: "Medium" },
+      { zh: "我喜欢在咖啡店里读书。", en: "I enjoy reading books in the café.", level: "Medium" },
+      { zh: "他正在打扫房间，把东西整理好。", en: "He is cleaning the room and organizing things.", level: "Medium" },
+      { zh: "请帮我把这张照片打印出来。", en: "Please help me print this photo.", level: "Medium" },
+      { zh: "她喜欢在周末做手工艺品。", en: "She likes making crafts on weekends.", level: "Medium" },
+      { zh: "他每天早上喝一杯水。", en: "He drinks a glass of water every morning.", level: "Medium" },
+      { zh: "我们计划明天去动物园。", en: "We plan to go to the zoo tomorrow.", level: "Medium" },
+      { zh: "她正在给花浇水。", en: "She is watering the flowers.", level: "Medium" },
+      { zh: "请帮我拿一下那本书。", en: "Please help me get that book.", level: "Medium" },
+      { zh: "他们周末常常一起踢足球。", en: "They often play football together on weekends.", level: "Medium" },
+      { zh: "他正在写一封电子邮件给朋友。", en: "He is writing an email to his friend.", level: "Medium" },
+      { zh: "请把灯打开，我看不清楚。", en: "Please turn on the light; I can't see clearly.", level: "Medium" },
+      { zh: "她喜欢在公园里跑步。", en: "She likes running in the park.", level: "Medium" },
+      { zh: "我们正在准备午餐。", en: "We are preparing lunch.", level: "Medium" },
+      { zh: "她正在整理她的衣柜。", en: "She is organizing her wardrobe.", level: "Medium" },
+      { zh: "我喜欢和朋友一起去咖啡店。", en: "I enjoy going to the café with my friends.", level: "Medium" },
+      { zh: "他们正在学习新的单词。", en: "They are learning new words.", level: "Medium" },
+      { zh: "请把门关上，外面很冷。", en: "Please close the door; it's cold outside.", level: "Medium" },
+      { zh: "他每天都会写日记。", en: "He writes a diary every day.", level: "Medium" },
+      { zh: "她喜欢在周末看电影。", en: "She likes watching movies on weekends.", level: "Medium" },
+      { zh: "我正在整理我的书桌。", en: "I am organizing my desk.", level: "Medium" },
+      { zh: "他们在公园里骑自行车。", en: "They are riding bicycles in the park.", level: "Medium" },
+      { zh: "他喜欢听轻音乐放松。", en: "He likes listening to soft music to relax.", level: "Medium" },
+      { zh: "我们需要买一些牛奶和面包。", en: "We need to buy some milk and bread.", level: "Medium" },
+      { zh: "她每天早上练习英语口语。", en: "She practices speaking English every morning.", level: "Medium" },
+      { zh: "请把窗户打开，让房间通风。", en: "Please open the window to let the room ventilate.", level: "Medium" },
+      { zh: "他喜欢在周末骑车旅行。", en: "He likes cycling trips on weekends.", level: "Medium" },
+      { zh: "她每天晚上写一篇小文章。", en: "She writes a short article every night.", level: "Medium" },
+      { zh: "他们正在花园里种花。", en: "They are planting flowers in the garden.", level: "Medium" },
+      { zh: "我喜欢在周末做运动。", en: "I like exercising on weekends.", level: "Medium" },
+      { zh: "我每天早上刷牙。", en: "I brush my teeth every morning.", level: "Medium" },
+      { zh: "他喜欢喝咖啡而不是茶。", en: "He likes drinking coffee instead of tea.", level: "Medium" },
+      { zh: "她正在写作业。", en: "She is doing her homework.", level: "Medium" },
+      { zh: "我们周末会去图书馆。", en: "We go to the library on weekends.", level: "Medium" },
+      { zh: "请把门关上。", en: "Please close the door.", level: "Medium" },
+      { zh: "孩子们在操场上玩耍。", en: "The children are playing on the playground.", level: "Medium" },
+      { zh: "我喜欢在公园散步。", en: "I like taking walks in the park.", level: "Medium" },
+      { zh: "他每天骑自行车上班。", en: "He rides his bicycle to work every day.", level: "Medium" },
+      { zh: "她正在学习钢琴。", en: "She is learning to play the piano.", level: "Medium" },
+      { zh: "请帮我拿那本书。", en: "Please help me get that book.", level: "Medium" },
+      { zh: "我们需要买一些水果。", en: "We need to buy some fruits.", level: "Medium" },
+      { zh: "他每天晚上读书。", en: "He reads books every night.", level: "Medium" },
+      { zh: "她喜欢喝果汁。", en: "She likes drinking juice.", level: "Medium" },
+      { zh: "请把灯关掉。", en: "Please turn off the light.", level: "Medium" },
+      { zh: "我正在整理房间。", en: "I am organizing the room.", level: "Medium" },
+      { zh: "她喜欢在周末做手工艺。", en: "She likes doing crafts on weekends.", level: "Medium" },
+      { zh: "我们明天去游泳吧。", en: "Let's go swimming tomorrow.", level: "Medium" },
+      { zh: "他正在写信给朋友。", en: "He is writing a letter to his friend.", level: "Medium" },
+      { zh: "孩子们在公园里跑来跑去。", en: "The children are running around in the park.", level: "Medium" },
+      { zh: "她每天早上喝一杯牛奶。", en: "She drinks a glass of milk every morning.", level: "Medium" },
+      { zh: "我们正在学习新的单词。", en: "We are learning new words.", level: "Medium" },
+      { zh: "请把窗户打开。", en: "Please open the window.", level: "Medium" },
+      { zh: "我每天写日记。", en: "I write a diary every day.", level: "Medium" },
+      { zh: "我们周末去郊游吧。", en: "Let's go on a trip this weekend.", level: "Medium" },
+      { zh: "她喜欢在公园里散步。", en: "She likes walking in the park.", level: "Medium" },
+      { zh: "请把垃圾扔进垃圾桶。", en: "Please throw the trash into the bin.", level: "Medium" },
+      { zh: "孩子们在花园里玩耍。", en: "The children are playing in the garden.", level: "Medium" },
+      { zh: "我正在准备明天的考试。", en: "I am preparing for tomorrow's exam.", level: "Medium" },
+      { zh: "我们需要买一些面包。", en: "We need to buy some bread.", level: "Medium" },
+      { zh: "她正在整理衣柜。", en: "She is organizing her wardrobe.", level: "Medium" },
+      { zh: "请帮我打印这份文件。", en: "Please help me print this document.", level: "Medium" },
+      { zh: "他每天晚上散步。", en: "He takes a walk every night.", level: "Medium" },
+      { zh: "他正在打扫房间。", en: "He is cleaning the room.", level: "Medium" },
+      { zh: "我们明天去看电影。", en: "We will go to the cinema tomorrow.", level: "Medium" },
+      { zh: "她喜欢喝茶。", en: "She likes drinking tea.", level: "Medium" },
+      { zh: "请把书放回书架。", en: "Please put the book back on the shelf.", level: "Medium" },
+      { zh: "我每天早上吃早餐。", en: "I eat breakfast every morning.", level: "Medium" },
+      { zh: "他每天练习弹钢琴。", en: "He practices playing the piano every day.", level: "Medium" },
+      { zh: "请把灯打开。", en: "Please turn on the light.", level: "Medium" },
+      { zh: "我们正在准备晚餐。", en: "We are preparing dinner.", level: "Medium" },
+      { zh: "他正在写电子邮件。", en: "He is writing an email.", level: "Medium" },
+      { zh: "孩子们在花园里玩。", en: "The children are playing in the garden.", level: "Medium" },
+      { zh: "她每天早上喝牛奶。", en: "She drinks milk every morning.", level: "Medium" },
+      { zh: "请帮我把椅子搬过来。", en: "Please help me move the chair.", level: "Medium" },
+      { zh: "她正在整理房间。", en: "She is organizing the room.", level: "Medium" },
+      { zh: "请帮我倒一杯水。", en: "Please pour me a glass of water.", level: "Medium" },
+      { zh: "他喜欢在周末骑自行车。", en: "He likes cycling on weekends.", level: "Medium" },
+      { zh: "她每天练习英语口语。", en: "She practices speaking English every day.", level: "Medium" },
+      { zh: "请把手机静音。", en: "Please put your phone on silent.", level: "Medium" },
+      { zh: "孩子们在教室里学习。", en: "The children are studying in the classroom.", level: "Medium" },
+      { zh: "我喜欢在咖啡店看书。", en: "I like reading in the café.", level: "Medium" },
+      { zh: "请帮我把窗户关上。", en: "Please help me close the window.", level: "Medium" },
+      { zh: "孩子们在操场上玩足球。", en: "The children are playing football on the playground.", level: "Medium" },
+      { zh: "他喜欢听轻音乐。", en: "He likes listening to soft music.", level: "Medium" },
+      { zh: "她正在做作业。", en: "She is doing her homework.", level: "Medium" },
+      { zh: "请帮我拿一下水瓶。", en: "Please help me get the water bottle.", level: "Medium" },
+      { zh: "我们周末去动物园吧。", en: "Let's go to the zoo this weekend.", level: "Medium" },
+      { zh: "他喜欢在周末画画。", en: "He likes painting on weekends.", level: "Medium" },
+      { zh: "她正在学习骑自行车。", en: "She is learning to ride a bicycle.", level: "Medium" },
+      { zh: "我们计划下周去海边。", en: "We plan to go to the beach next week.", level: "Medium" },
+      { zh: "请把书包放在桌子上。", en: "Please put the backpack on the table.", level: "Medium" },
+      { zh: "孩子们在厨房里帮忙做饭。", en: "The children are helping in the kitchen.", level: "Medium" },
+      { zh: "他每天晚上练习吉他。", en: "He practices playing the guitar every night.", level: "Medium" },
+      { zh: "她喜欢在雨天读书。", en: "She likes reading books on rainy days.", level: "Medium" },
+      { zh: "我们正在准备生日派对。", en: "We are preparing for a birthday party.", level: "Medium" },
+      { zh: "请帮我整理书桌上的东西。", en: "Please help me organize the things on the desk.", level: "Medium" },
+      { zh: "他每天早晨散步半小时。", en: "He takes a half-hour walk every morning.", level: "Medium" },
+      { zh: "她正在学习如何做蛋糕。", en: "She is learning how to bake a cake.", level: "Medium" },
+      { zh: "我们计划周末去博物馆。", en: "We plan to visit the museum this weekend.", level: "Medium" },
+      { zh: "请把钥匙放在门口的碗里。", en: "Please put the keys in the bowl by the door.", level: "Medium" },
+      { zh: "孩子们在客厅里玩积木。", en: "The children are playing with building blocks in the living room.", level: "Medium" },
+      { zh: "他正在练习游泳。", en: "He is practicing swimming.", level: "Medium" },
+      { zh: "她每天晚上听英语故事。", en: "She listens to English stories every night.", level: "Medium" },
+      { zh: "我们需要买一些纸和笔。", en: "We need to buy some paper and pens.", level: "Medium" },
+      { zh: "请帮我把椅子搬到阳台上。", en: "Please help me move the chair to the balcony.", level: "Medium" },
+      { zh: "他喜欢在花园里种花。", en: "He likes planting flowers in the garden.", level: "Medium" },
+      { zh: "她正在练习写日记。", en: "She is practicing writing a diary.", level: "Medium" },
+      { zh: "我们明天去图书馆借书。", en: "We will go to the library to borrow books tomorrow.", level: "Medium" },
+      { zh: "请把窗帘拉上。", en: "Please draw the curtains.", level: "Medium" },
+      { zh: "孩子们在操场上玩跳绳。", en: "The children are playing jump rope on the playground.", level: "Medium" },
+      { zh: "他每天早上做瑜伽。", en: "He does yoga every morning.", level: "Medium" },
+      { zh: "她喜欢在周末听音乐会。", en: "She likes attending concerts on weekends.", level: "Medium" },
+      { zh: "我们正在准备晚上的聚会。", en: "We are preparing for the evening party.", level: "Medium" },
+      { zh: "请帮我把杯子放到橱柜里。", en: "Please help me put the cups in the cupboard.", level: "Medium" },
+      { zh: "他正在学习如何做饭。", en: "He is learning how to cook.", level: "Medium" },
+      { zh: "她每天练习画画半小时。", en: "She practices painting for half an hour every day.", level: "Medium" },
+      { zh: "我们计划周末去看电影。", en: "We plan to watch a movie this weekend.", level: "Medium" },
+
+    ];
+
+    console.log('当前题库的题目总数为：', pool.length)
+
+    // 找出 zh 相同的题目（重复题）
+    function findDuplicateZh(questions) {
+      const map = new Map();
+      const duplicates = [];
+
+      for (const q of questions) {
+        const key = q.zh.trim(); // 去除空格影响
+        if (!map.has(key)) {
+          map.set(key, [q]);
+        } else {
+          map.get(key).push(q);
+        }
+      }
+
+      // 筛选出出现次数 > 1 的（即 zh 重复的）
+      for (const [zh, list] of map.entries()) {
+        if (list.length > 1) {
+          duplicates.push(zh);
+        }
+      }
+
+      return duplicates;
+    }
+
+    const duplicates = findDuplicateZh(pool);
+    console.log('重复题：', duplicates);
+
+    const cardsEl = document.getElementById('cards');
+    const difficultyEl = document.getElementById('difficulty');
+    const pickBtn = document.getElementById('pickBtn');
+    const revealBtn = document.getElementById('revealBtn');
+    const shuffleBtn = document.getElementById('shuffleBtn');
+    const copyBtn = document.getElementById('copyBtn');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const countEl = document.getElementById('count');
+
+    // simple shuffle
+    function shuffleArray(a) {
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));[a[i], a[j]] = [a[j], a[i]];
+      }
+      return a;
+    }
+
+    function filterPool(level) {
+      if (level === 'All') return pool.slice();
+      return pool.filter(x => x.level === level);
+    }
+
+    function renderCards(list, hideAnswer = true) {
+      cardsEl.innerHTML = '';
+      if (list.length === 0) {
+        cardsEl.innerHTML = '<div class="card"><div class="zh">没有匹配的句子。</div></div>';
+        return;
+      }
+      list.forEach(item => {
+        const el = document.createElement('div'); el.className = 'card';
+        el.innerHTML = `<div class="zh">${item.zh}</div>
+                        <div class="en" data-en>${item.en}</div>
+                        <div class="meta"><div class="small">${item.level}</div>
+                        <div class="actions"><button class="secondary btn-speak">🔊 朗读</button><button class="secondary btn-toggle">显示答案</button></div></div>`;
+        cardsEl.appendChild(el);
+
+        const enEl = el.querySelector('[data-en]');
+        const btnToggle = el.querySelector('.btn-toggle');
+        const btnSpeak = el.querySelector('.btn-speak');
+
+        if (hideAnswer) enEl.style.display = 'none'; else enEl.style.display = 'block';
+
+        btnToggle.addEventListener('click', () => {
+          enEl.style.display = enEl.style.display === 'none' ? 'block' : 'none';
+        });
+
+        btnSpeak.addEventListener('click', () => {
+          speakText(item.en);
+        });
+      });
+    }
+
+    function speakText(text) {
+      if (!('speechSynthesis' in window)) return alert('当前浏览器不支持语音合成。');
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.lang = 'en-US';
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(utter);
+    }
+
+    pickBtn.addEventListener('click', () => {
+      const level = difficultyEl.value;
+      const count = Math.max(1, Math.min(20, parseInt(countEl.value) || 1));
+      const poolFiltered = filterPool(level);
+      if (poolFiltered.length === 0) { renderCards([]); return; }
+      const shuffled = shuffleArray(poolFiltered.slice());
+      const selected = shuffled.slice(0, count);
+      renderCards(selected, true);
+    });
+
+    shuffleBtn.addEventListener('click', () => {
+      const level = difficultyEl.value;
+      const poolFiltered = filterPool(level);
+      const shuffled = shuffleArray(poolFiltered.slice());
+      renderCards(shuffled.slice(0, parseInt(countEl.value) || 1, true));
+    });
+
+    revealBtn.addEventListener('click', () => {
+      const enEls = document.querySelectorAll('.en');
+      enEls.forEach(e => { e.style.display = (e.style.display === 'none') ? 'block' : 'none' });
+    });
+
+    copyBtn.addEventListener('click', () => {
+      const cards = Array.from(document.querySelectorAll('.card')).map(c => {
+        const zh = c.querySelector('.zh').innerText.trim();
+        const en = c.querySelector('.en').innerText.trim();
+        const lvl = c.querySelector('.meta .small').innerText.trim();
+        return `${zh}\t${en}\t${lvl}`;
+      }).join('\n');
+      if (!cards) return alert('当前没有题目可复制，请先抽取题目。');
+      navigator.clipboard.writeText(cards).then(() => alert('题目已复制到剪贴板（制表符分隔）'));
+    });
+
+    downloadBtn.addEventListener('click', () => {
+      const rows = [['中文', '英文', '难度']];
+      pool.forEach(i => rows.push([i.zh, i.en, i.level]));
+      const csv = rows.map(r => r.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = '翻译游戏题库.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    });
+
+    // initial render: show one random easy
+    (function () {
+      difficultyEl.value = 'All';
+      countEl.value = '1';
+      const initial = shuffleArray(pool.slice()).slice(0, 1);
+      renderCards(initial, true);
+    })();
+
+  </script>
+</body>
+
+</html>
